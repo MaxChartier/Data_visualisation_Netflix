@@ -146,21 +146,66 @@ def inject_css():
 
 @st.cache_data
 def load_data():
+    """Load and clean Netflix data with comprehensive preprocessing"""
     base = Path(".")
+    
     users = pd.read_csv(base / "users.csv", parse_dates=["created_at", "subscription_start_date"])
     watch = pd.read_csv(base / "watch_history.csv", parse_dates=["watch_date"])
     movies = pd.read_csv(base / "movies.csv")
     
-    watch["watch_duration_minutes"] = pd.to_numeric(watch["watch_duration_minutes"], errors="coerce").fillna(0)
     users["monthly_spend"] = pd.to_numeric(users["monthly_spend"], errors="coerce")
     users["age"] = pd.to_numeric(users["age"], errors="coerce")
+    users["household_size"] = pd.to_numeric(users["household_size"], errors="coerce")
+    
+    users.loc[(users["age"] < 13) | (users["age"] > 100), "age"] = np.nan
+    
+    users.loc[users["monthly_spend"] < 0, "monthly_spend"] = np.nan
+    
+    if "subscription_plan" in users.columns:
+        users["subscription_plan"] = users["subscription_plan"].str.strip().str.title()
+    
+    if "primary_device" in users.columns:
+        users["primary_device"] = users["primary_device"].str.strip().str.title()
+    
+    if "country" in users.columns:
+        users["country"] = users["country"].str.strip().str.title()
+    
+    if "is_active" in users.columns:
+        users["is_active"] = users["is_active"].astype(bool)
+    
+    users = users.drop_duplicates(subset=["user_id"], keep="first")
+    
+
+    watch["watch_duration_minutes"] = pd.to_numeric(watch["watch_duration_minutes"], errors="coerce")
+    watch.loc[watch["watch_duration_minutes"] < 0, "watch_duration_minutes"] = 0
+    watch["watch_duration_minutes"] = watch["watch_duration_minutes"].fillna(0)
+    
+    watch.loc[watch["watch_duration_minutes"] > 1440, "watch_duration_minutes"] = np.nan
+    
+    if "user_rating" in watch.columns:
+        watch["user_rating"] = pd.to_numeric(watch["user_rating"], errors="coerce")
+        watch.loc[(watch["user_rating"] < 0) | (watch["user_rating"] > 10), "user_rating"] = np.nan
+    
+    watch = watch.dropna(subset=["user_id", "movie_id"])
+    
+    watch = watch.drop_duplicates(subset=["user_id", "movie_id", "watch_date"], keep="first")
+    
+    if "genre_primary" in movies.columns:
+        movies["genre_primary"] = movies["genre_primary"].str.strip().str.title()
+    
+    if "content_type" in movies.columns:
+        movies["content_type"] = movies["content_type"].str.strip().str.title()
+    
+    movies = movies.drop_duplicates(subset=["movie_id"], keep="first")
+    
+    users = users.dropna(subset=["user_id"])
+    watch = watch.dropna(subset=["user_id"])
     
     return users, watch, movies
 
 def main():
     inject_css()
     
-    # Custom header with author attribution
     st.markdown("""
     <div class='custom-header'>
         <h1> The Engagement-Monetization Gap</h1>
@@ -356,7 +401,6 @@ def main():
     
     st.markdown("### Engagement patterns over time")
     
-    # Complex visualization: Cohort analysis of watch behavior by subscription plan
     watch_with_users = watch.merge(users[['user_id', 'subscription_plan', 'monthly_spend']], on='user_id', how='left')
     watch_with_users['watch_date'] = pd.to_datetime(watch_with_users['watch_date'])
     watch_with_users['year_month'] = watch_with_users['watch_date'].dt.to_period('M').astype(str)
@@ -384,17 +428,14 @@ def main():
     
     st.markdown("### The retention-spend relationship")
     
-    # Create meaningful retention analysis by engagement and spend
     retention_df = user_engagement_clean.copy()
     
-    # Create spend brackets
     retention_df['spend_bracket'] = pd.cut(
         retention_df['monthly_spend'],
         bins=[0, 5, 10, 15, 100],
         labels=['$0-5', '$5-10', '$10-15', '$15+']
     )
     
-    # Create engagement brackets
     retention_df['engagement_level'] = pd.qcut(
         retention_df['total_watch_minutes'], 
         q=4, 
@@ -402,17 +443,14 @@ def main():
         duplicates='drop'
     )
     
-    # Calculate retention rate for each combination
     retention_matrix = retention_df.groupby(['engagement_level', 'spend_bracket']).agg({
         'is_active': ['sum', 'count']
     }).reset_index()
     retention_matrix.columns = ['engagement_level', 'spend_bracket', 'active_count', 'total_count']
     retention_matrix['retention_rate'] = (retention_matrix['active_count'] / retention_matrix['total_count'] * 100).round(1)
     
-    # Pivot for heatmap
     heatmap_data = retention_matrix.pivot(index='engagement_level', columns='spend_bracket', values='retention_rate')
     
-    # Create proper heatmap
     fig_heatmap = go.Figure(data=go.Heatmap(
         z=heatmap_data.values,
         x=heatmap_data.columns,
@@ -488,8 +526,6 @@ def main():
     
     st.markdown("### Visualizing the opportunity")
     
-    # Complex multi-axis visualization showing the financial opportunity
-    # Use the retention_df that already has spend_bracket column
     spend_brackets = retention_df.groupby('spend_bracket').agg({
         'user_id': 'count',
         'total_watch_minutes': 'mean',
@@ -554,7 +590,6 @@ def main():
     pricing, and content offerings.
     """)
     
-    # Geographic analysis of the target segment
     target_segment_geo = target_segment.groupby('country').agg({
         'user_id': 'count',
         'monthly_spend': 'mean',
@@ -566,7 +601,6 @@ def main():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        # Choropleth map showing geographic distribution
         fig_map = px.choropleth(
             target_segment_geo,
             locations='country',
@@ -640,7 +674,6 @@ def main():
     
     st.markdown("---")
     
-    # Enhanced footer
     st.markdown("""
     <div class='footer'>
         <div class='footer-author'>Created by Max Chartier</div>

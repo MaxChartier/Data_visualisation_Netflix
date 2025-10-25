@@ -1,0 +1,27 @@
+# Netflix Monetization Gap Analysis Dashboard
+
+**Author:** Max Chartier  
+**Date:** October 2025
+
+### Installation
+
+Install required packages:
+```bash
+pip install -r requirements.txt
+```
+
+### Required Data Files
+
+Ensure these CSV files are in the project directory:
+- `users.csv` - User demographic and subscription data
+- `watch_history.csv` - User viewing history and engagement metrics
+- `movies.csv` - Content catalog with genres and metadata
+
+### Running the Dashboard
+
+```bash
+streamlit run netflix_story_dashboard.py
+```
+
+The dashboard will open in your default web browser at `http://localhost:8501`
+
